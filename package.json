@@ -1,0 +1,16 @@
+{
+  "name": "silent-bluetooth-keepalive",
+  "version": "1.0.0",
+  "description": "Play silent tone every 5 minute to prevent Bluetooth standby",
+  "main": "silent.js",
+  "scripts": {
+    "start": "node silent.js",
+    "service-i": "node install-service.js",
+    "service-u": "node uninstall-service.js"
+  },
+  "dependencies": {
+    "node-windows": "^1.0.0-beta.8",
+    "speaker": "^0.5.5",
+    "tonegenerator": "^0.3.3"
+  }
+}
