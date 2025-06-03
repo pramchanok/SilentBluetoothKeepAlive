@@ -9,6 +9,7 @@
     "service-u": "node uninstall-service.js"
   },
   "dependencies": {
-    "node-windows": "^1.0.0-beta.8"
+    "node-windows": "^1.0.0-beta.8",
+    "speaker": "^0.5.5"
   }
 }

@@ -1,62 +1,58 @@
 const fs = require("fs");
 const path = require("path");
-const { exec } = require("child_process");
-
-const logFile = path.join(__dirname, "daemon", "silentbluetoothkeepalive.out.log");
-const toneFile = path.join(__dirname, "silent.wav");
+const Speaker = require("speaker");
 
 // ลบ log เก่าทุก 7 วัน
 function cleanupOldLog() {
+  const logFile = path.join(__dirname, "daemon", "silentbluetoothkeepalive.out.log");
+
   try {
     const stats = fs.statSync(logFile);
     const ageInDays = (Date.now() - stats.mtimeMs) / (1000 * 60 * 60 * 24);
     if (ageInDays > 7) {
       fs.unlinkSync(logFile);
-      console.log("🧹 Log file removed");
+      console.log("🧹 Log file removed (older than 7 days)");
     }
   } catch (err) {
-    if (err.code !== "ENOENT") console.error("⚠️ Log error:", err.message);
+    if (err.code !== "ENOENT") {
+      console.error("⚠️ Failed to delete log file:", err.message);
+    }
   }
 }
 
-// สร้างไฟล์เสียงเงียบ (ถ้ายังไม่มี)
-function createSilentWav(filePath) {
-  const sampleRate = 44100;
-  const duration = 1; // วินาที
-  const freq = 15000; // Hz (15000 Hz volume ที่ต่ำปลอดภัยต่อคนและสัตว์และอุปกรณ์)
-  const volume = 0.001;
-  const samples = sampleRate * duration;
-  const headerSize = 44;
-  const buffer = Buffer.alloc(headerSize + samples * 2);
-
-  buffer.write("RIFF", 0);
-  buffer.writeUInt32LE(buffer.length - 8, 4);
-  buffer.write("WAVE", 8);
-  buffer.write("fmt ", 12);
-  buffer.writeUInt32LE(16, 16);
-  buffer.writeUInt16LE(1, 20);
-  buffer.writeUInt16LE(1, 22);
-  buffer.writeUInt32LE(sampleRate, 24);
-  buffer.writeUInt32LE(sampleRate * 2, 28);
-  buffer.writeUInt16LE(2, 32);
-  buffer.writeUInt16LE(16, 34);
-  buffer.write("data", 36);
-  buffer.writeUInt32LE(samples * 2, 40);
+// เตรียม buffer ไว้ใช้ซ้ำ
+function generateSilentToneBuffer(sampleRate, durationSec, freqHz, volume) {
+  const samples = sampleRate * durationSec;
+  const buffer = Buffer.alloc(samples * 2); // 16-bit mono = 2 bytes per sample
 
   for (let i = 0; i < samples; i++) {
     const t = i / sampleRate;
-    const sample = Math.round(Math.sin(2 * Math.PI * freq * t) * 32767 * volume);
-    buffer.writeInt16LE(sample, headerSize + i * 2);
+    const sample = Math.round(Math.sin(2 * Math.PI * freqHz * t) * 32767 * volume);
+    buffer.writeInt16LE(sample, i * 2);
   }
 
-  fs.writeFileSync(filePath, buffer);
-  console.log("🎧 silent.wav created.");
+  return buffer;
 }
 
-// เล่นเสียงด้วย ffplay
+const sampleRate = 44100;
+const duration = 1; // seconds
+const freq = 15000; // Hz (15000 Hz volume ที่ต่ำปลอดภัยต่อคนและสัตว์และอุปกรณ์)
+const volume = 0.001;
+const toneBuffer = generateSilentToneBuffer(sampleRate, duration, freq, volume);
+
+// เล่นเสียงทุก 5 นาที
 function playSilentTone() {
-  exec(`ffplay -nodisp -autoexit -loglevel quiet "${toneFile}"`, (err) => {
-    const now = new Date().toLocaleString("th-TH", {
+  try {
+    const speaker = new Speaker({
+      channels: 1,
+      bitDepth: 16,
+      sampleRate
+    });
+
+    speaker.write(toneBuffer);
+    speaker.end();
+
+    const formatted = new Date().toLocaleString("th-TH", {
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
@@ -66,13 +62,12 @@ function playSilentTone() {
       hour12: false,
     });
 
-    if (err) console.error("❌ Failed to play tone:", err.message);
-    else console.log("🔊 Silent tone triggered at", now);
-  });
+    console.log("🔊 Silent tone triggered at", formatted);
+  } catch (err) {
+    console.error("❌ Failed to play tone:", err.message);
+  }
 }
 
 // เริ่มต้น
 cleanupOldLog();
-if (!fs.existsSync(toneFile)) createSilentWav(toneFile);
 setInterval(playSilentTone, 5 * 60 * 1000); // ทุก 5 นาที
-
